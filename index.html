@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Propagation of error calculator</title>
+  <style>
+    body {
+      background-color: white;
+      color: black;
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    .container {
+      max-width: 1000px;
+      margin: auto;
+      display: flex;
+      gap: 20px;
+    }
+    .main-area {
+      flex: 2;
+    }
+    .sidebar {
+      flex: 1;
+      border: 1px solid #ccc;
+      padding: 15px;
+      border-radius: 5px;
+      height: fit-content;
+    }
+    h1, h3 {
+      text-align: center;
+    }
+    label {
+      display: block;
+      margin-top: 10px;
+    }
+    textarea, input[type="text"] {
+      width: 100%;
+      font-size: 14px;
+      padding: 8px;
+      margin-top: 5px;
+      box-sizing: border-box;
+    }
+    button {
+      margin-top: 15px;
+      padding: 10px;
+      font-size: 14px;
+      cursor: pointer;
+      width: 100%;
+    }
+    .checkboxes {
+      margin-top: 15px;
+    }
+    .checkboxes label {
+      display: inline-block;
+      margin-right: 10px;
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.11.0/math.min.js"></script>
+</head>
+<body>
+  <h1>Propagation of error calculator</h1>
+  <div class="container">
+    <div class="main-area">
+      <label for="formulaInput">Enter formula (e.g., x*(100/(100-y))):</label>
+      <textarea id="formulaInput" rows="3" placeholder="Enter formula"></textarea>
+      <button id="extractBtn" onclick="extractVariables()">Extract Variables</button>
+      <div id="variablesContainer" class="checkboxes"></div>
+      <button id="calcBtn" onclick="calculateUncertainty()">Calculate Uncertainty</button>
+      <label for="resultOutput">Result:</label>
+      <textarea id="resultOutput" rows="4" readonly></textarea>
+      <button id="copyBtn" onclick="copyResult()">Copy to Clipboard</button>
+    </div>
+    <div class="sidebar">
+      <h3>Options</h3>
+      <label for="powerName">Power Function Name:</label>
+      <input type="text" id="powerName" value="POWER">
+      <label for="sqrtName">Square Root Function Name:</label>
+      <input type="text" id="sqrtName" value="SQRT">
+    </div>
+  </div>
+  <script>
+    function getVariables(node) {
+      const vars = [];
+      node.traverse(function (n) {
+        if (n.isSymbolNode) {
+          vars.push(n.name);
+        }
+      });
+      return [...new Set(vars)];
+    }
+    
+    function extractVariables() {
+      const formula = document.getElementById('formulaInput').value;
+      let variables = [];
+      try {
+        const node = math.parse(formula);
+        variables = getVariables(node);
+      } catch (e) {
+        document.getElementById('variablesContainer').innerText = `Parsing error: ${e.message}`;
+        return;
+      }
+      if (!variables.length) {
+        document.getElementById('variablesContainer').innerText = "No variables found.";
+        return;
+      }
+      let html = `<p>Select variables with uncertainty:</p>`;
+      variables.forEach(v => {
+        html += `<label><input type="checkbox" value="${v}" checked> ${v}</label>`;
+      });
+      document.getElementById('variablesContainer').innerHTML = html;
+    }
+    
+    function transformPowers(expr, powerName) {
+      // Replace instances of a^b with powerName(a,b)
+      return expr.replace(/(\([^()]+\)|[a-zA-Z0-9.]+)\s*\^\s*(\([^()]+\)|[a-zA-Z0-9.]+)/g, function(match, base, exponent) {
+          return powerName + '(' + base.trim() + ',' + exponent.trim() + ')';
+      });
+    }
+    
+    function calculateUncertainty() {
+      const formula = document.getElementById('formulaInput').value;
+      const selectedVars = Array.from(document.querySelectorAll('#variablesContainer input[type="checkbox"]:checked'))
+                                .map(cb => cb.value);
+      if (!selectedVars.length) {
+        document.getElementById('resultOutput').value = "No variables selected.";
+        return;
+      }
+      const powerName = document.getElementById('powerName').value || "POWER";
+      const sqrtName = document.getElementById('sqrtName').value || "SQRT";
+      try {
+        const terms = selectedVars.map(v => {
+          let derivative = math.derivative(formula, v).toString();
+          derivative = transformPowers(derivative, powerName);
+          return `${powerName}((${derivative})*u_${v},2)`;
+        });
+        let result = `${sqrtName}(${terms.join("+")})`;
+        result = result.replace(/\s+/g, '');
+        document.getElementById('resultOutput').value = result;
+      } catch (e) {
+        document.getElementById('resultOutput').value = `Error:${e.message}`;
+      }
+    }
+    
+    function copyResult() {
+      const resultText = document.getElementById('resultOutput');
+      resultText.select();
+      document.execCommand("copy");
+    }
+  </script>
+</body>
+</html>
